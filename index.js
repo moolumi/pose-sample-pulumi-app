@@ -26,8 +26,9 @@ awsx.apigateway
 
 
 // A Lambda function to invoke.
+// Updated to Node.js 20.x runtime for improved performance and security
 const eventHandler = new aws.lambda.CallbackFunction("handler", {
-    runtime: Runtime.NodeJS18dX,
+    runtime: Runtime.NodeJS20dX, // Using latest supported Node.js runtime
     callback: async (event, context) => {
         return {
             statusCode: 200,
