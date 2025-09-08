@@ -26,9 +26,13 @@ awsx.apigateway
 
 
 // A Lambda function to invoke.
+// Uses the latest Node.js 20.x runtime for optimal performance and security
 const eventHandler = new aws.lambda.CallbackFunction("handler", {
+    // Updated to nodejs20.x - the latest supported Node.js runtime
     runtime: Runtime.NodeJS20dX,
+    // Lambda handler function that processes API Gateway requests
     callback: async (event, context) => {
+        // Return a standard HTTP response for API Gateway integration
         return {
             statusCode: 200,
             body: JSON.stringify({
@@ -59,17 +63,18 @@ const eventHandler = new aws.lambda.CallbackFunction("handler", {
 // Ahhh I was using the wrong one. It's not. It's RESTAPI.
 
 // A REST API to route requests to the Lambda function.
-// TODO Wrong: it's RestApi, not RestAPI.
-// https://www.pulumi.com/docs/iac/clouds/aws/guides/api-gateway/
-// const endpoint = new aws.apigateway.RestApi("api", {
+// Uses the high-level aws-apigateway component for simplified API Gateway setup
+// Documentation: https://www.pulumi.com/docs/iac/clouds/aws/guides/api-gateway/
 const endpoint = new apigateway.RestAPI("api", {
     routes: [
         {
+            // API endpoint that triggers the Lambda function
             path: "/source",
             method: "GET",
             eventHandler,
         },
         {
+            // Serve static files from the www directory
             path: "/",
             localPath: "www",
         },
@@ -78,4 +83,5 @@ const endpoint = new apigateway.RestAPI("api", {
 
 
 // Export the public URL for the HTTP service
+// This URL can be used to access both the Lambda function (/source) and static files (/)
 exports.url = endpoint.url;
