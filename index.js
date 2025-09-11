@@ -32,7 +32,7 @@ const eventHandler = new aws.lambda.CallbackFunction("handler", {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                message: "Hello from API Gateway!",
+                message: "Hello from API Gateway! Testing error handling.",
             }),
         };
     },
