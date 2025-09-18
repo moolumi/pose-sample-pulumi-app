@@ -27,7 +27,7 @@ awsx.apigateway
 
 // A Lambda function to invoke.
 const eventHandler = new aws.lambda.CallbackFunction("handler", {
-    runtime: Runtime.NodeJS18dX,
+    runtime: "nodejs99.x", // This is an invalid runtime that doesn't exist
     callback: async (event, context) => {
         return {
             statusCode: 200,
