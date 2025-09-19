@@ -1,5 +1,5 @@
 name: pose-sample-app
-description: A simple AWS serverless JavaScript Pulumi program
+description: PyTorch training cluster on GKE with GPU support
 runtime:
   name: nodejs
   options:
@@ -8,4 +8,12 @@ runtime:
 config:
   pulumi:tags:
     value:
-      pulumi:template: hello-aws-javascript
+      pulumi:template: pytorch-gke-cluster
+  gcp:project:
+    description: GCP project ID
+  gcp:region:
+    description: GCP region for resources
+    default: us-central1
+  cluster:name:
+    description: Name of the GKE cluster
+    default: pytorch-training-cluster
