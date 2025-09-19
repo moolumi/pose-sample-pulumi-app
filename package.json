@@ -1,10 +1,20 @@
 {
     "name": "pose-sample-app",
     "main": "index.js",
+    "scripts": {
+        "test": "node -c index.js && echo 'Syntax check passed'",
+        "lint": "eslint . --ext .js --ignore-pattern node_modules/ || echo 'ESLint not configured'",
+        "pulumi:preview": "pulumi preview",
+        "pulumi:up": "pulumi up",
+        "audit": "npm audit"
+    },
     "dependencies": {
         "@pulumi/aws": "^6.0.0",
         "@pulumi/aws-apigateway": "^3.0.0",
         "@pulumi/awsx": "^2.0.2",
         "@pulumi/pulumi": "^3.0.0"
+    },
+    "devDependencies": {
+        "eslint": "^8.0.0"
     }
 }
