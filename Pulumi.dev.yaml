@@ -1,0 +1,4 @@
+config:
+  gcp:project: "your-gcp-project-id"  # Replace with your actual project ID
+  gcp:region: "us-central1"
+  cluster:name: "pytorch-training-cluster"

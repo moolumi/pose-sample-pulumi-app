@@ -1,0 +1,168 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pytorch-distributed-training
+  namespace: pytorch-training
+  labels:
+    app: pytorch-distributed
+    experiment: multi-gpu
+spec:
+  parallelism: 2  # Number of worker pods
+  template:
+    metadata:
+      labels:
+        app: pytorch-distributed
+        experiment: multi-gpu
+    spec:
+      serviceAccountName: pytorch-training
+      restartPolicy: Never
+      
+      # Tolerate GPU node taints
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      
+      # Schedule on GPU nodes
+      nodeSelector:
+        node-type: gpu
+      
+      containers:
+      - name: pytorch-distributed-trainer
+        image: pytorch/pytorch:2.1.0-cuda11.8-cudnn8-devel
+        
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 4
+            memory: 16Gi
+            nvidia.com/gpu: 1
+        
+        # Environment variables for distributed training
+        env:
+        - name: MASTER_ADDR
+          value: "pytorch-distributed-training-master"
+        - name: MASTER_PORT
+          value: "29500"
+        - name: WORLD_SIZE
+          value: "2"
+        - name: RANK
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        
+        # Distributed training command
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - |
+          echo "Starting distributed PyTorch training..."
+          echo "Rank: $RANK, World Size: $WORLD_SIZE"
+          echo "Master: $MASTER_ADDR:$MASTER_PORT"
+          
+          # Install additional dependencies
+          pip install torchvision torchaudio
+          
+          # Wait for master to be ready if this is a worker
+          if [ "$RANK" != "0" ]; then
+            echo "Waiting for master to be ready..."
+            sleep 30
+          fi
+          
+          # Distributed training script
+          python -c "
+          import torch
+          import torch.distributed as dist
+          import torch.nn as nn
+          import torch.optim as optim
+          import torch.multiprocessing as mp
+          from torch.nn.parallel import DistributedDataParallel as DDP
+          import os
+          
+          def setup():
+              os.environ['MASTER_ADDR'] = os.getenv('MASTER_ADDR', 'localhost')
+              os.environ['MASTER_PORT'] = os.getenv('MASTER_PORT', '29500')
+              
+              rank = int(os.getenv('RANK', 0))
+              world_size = int(os.getenv('WORLD_SIZE', 1))
+              
+              print(f'Initializing process group... Rank: {rank}, World Size: {world_size}')
+              dist.init_process_group('nccl', rank=rank, world_size=world_size)
+              torch.cuda.set_device(rank)
+          
+          def cleanup():
+              dist.destroy_process_group()
+          
+          def train():
+              setup()
+              
+              rank = dist.get_rank()
+              device = torch.cuda.current_device()
+              
+              print(f'Rank {rank} using device: {device}')
+              
+              # Create model and move to GPU
+              model = nn.Sequential(
+                  nn.Linear(784, 256),
+                  nn.ReLU(),
+                  nn.Linear(256, 128),
+                  nn.ReLU(),
+                  nn.Linear(128, 10)
+              ).to(device)
+              
+              # Wrap model with DDP
+              model = DDP(model, device_ids=[device])
+              
+              # Create dummy data
+              x = torch.randn(1000, 784).to(device)
+              y = torch.randint(0, 10, (1000,)).to(device)
+              
+              criterion = nn.CrossEntropyLoss()
+              optimizer = optim.Adam(model.parameters())
+              
+              print(f'Rank {rank}: Starting distributed training...')
+              for epoch in range(5):
+                  optimizer.zero_grad()
+                  outputs = model(x)
+                  loss = criterion(outputs, y)
+                  loss.backward()
+                  optimizer.step()
+                  
+                  if rank == 0:
+                      print(f'Epoch {epoch+1}/5, Loss: {loss.item():.4f}')
+              
+              print(f'Rank {rank}: Training completed!')
+              cleanup()
+          
+          if __name__ == '__main__':
+              train()
+          "
+        
+        ports:
+        - containerPort: 29500
+          name: dist-port
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pytorch-distributed-training-master
+  namespace: pytorch-training
+spec:
+  selector:
+    app: pytorch-distributed
+    experiment: multi-gpu
+  ports:
+  - port: 29500
+    targetPort: 29500
+    name: dist-port
+  clusterIP: None  # Headless service

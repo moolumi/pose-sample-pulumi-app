@@ -1,0 +1,147 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pytorch-training-example
+  namespace: pytorch-training
+  labels:
+    app: pytorch-training
+    experiment: example
+spec:
+  template:
+    metadata:
+      labels:
+        app: pytorch-training
+        experiment: example
+    spec:
+      serviceAccountName: pytorch-training
+      restartPolicy: Never
+      
+      # Tolerate GPU node taints
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      
+      # Schedule on GPU nodes
+      nodeSelector:
+        node-type: gpu
+      
+      containers:
+      - name: pytorch-trainer
+        image: pytorch/pytorch:2.1.0-cuda11.8-cudnn8-devel
+        
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 4
+            memory: 16Gi
+            nvidia.com/gpu: 1
+        
+        # Environment variables
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        
+        # Training command
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - |
+          echo "Starting PyTorch training job..."
+          echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
+          echo "GPU count: $(python -c 'import torch; print(torch.cuda.device_count())')"
+          echo "GPU name: $(python -c 'import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"No GPU\")')"
+          
+          # Install additional dependencies if needed
+          pip install torchvision torchaudio
+          
+          # Simple training script
+          python -c "
+          import torch
+          import torch.nn as nn
+          import torch.optim as optim
+          import time
+          
+          print('Setting up simple neural network...')
+          device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+          print(f'Using device: {device}')
+          
+          # Simple model
+          model = nn.Sequential(
+              nn.Linear(784, 256),
+              nn.ReLU(),
+              nn.Linear(256, 128),
+              nn.ReLU(),
+              nn.Linear(128, 10)
+          ).to(device)
+          
+          # Dummy data
+          x = torch.randn(1000, 784).to(device)
+          y = torch.randint(0, 10, (1000,)).to(device)
+          
+          criterion = nn.CrossEntropyLoss()
+          optimizer = optim.Adam(model.parameters())
+          
+          print('Starting training...')
+          for epoch in range(10):
+              start_time = time.time()
+              optimizer.zero_grad()
+              outputs = model(x)
+              loss = criterion(outputs, y)
+              loss.backward()
+              optimizer.step()
+              epoch_time = time.time() - start_time
+              print(f'Epoch {epoch+1}/10, Loss: {loss.item():.4f}, Time: {epoch_time:.2f}s')
+          
+          print('Training completed successfully!')
+          "
+        
+        # Volume mounts for persistent storage
+        volumeMounts:
+        - name: training-data
+          mountPath: /workspace/data
+        - name: model-checkpoints
+          mountPath: /workspace/checkpoints
+      
+      volumes:
+      - name: training-data
+        persistentVolumeClaim:
+          claimName: training-data-pvc
+      - name: model-checkpoints
+        persistentVolumeClaim:
+          claimName: model-checkpoints-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: training-data-pvc
+  namespace: pytorch-training
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: pytorch-ssd
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-checkpoints-pvc
+  namespace: pytorch-training
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: pytorch-ssd
+  resources:
+    requests:
+      storage: 20Gi
