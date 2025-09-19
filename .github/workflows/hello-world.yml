@@ -1,0 +1,31 @@
+name: Hello World
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  hello-world:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Say Hello
+      run: |
+        echo "Hello, World! 🌍"
+        echo "This is a simple GitHub Actions workflow"
+        echo "Repository: ${{ github.repository }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit SHA: ${{ github.sha }}"
+        
+    - name: Show environment info
+      run: |
+        echo "Runner OS: ${{ runner.os }}"
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Event: ${{ github.event_name }}"
+        date
