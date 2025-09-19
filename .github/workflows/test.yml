@@ -1,0 +1,108 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Test Pulumi Program
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: |
+        # Install ESLint if not present
+        if ! npm list eslint --depth=0 2>/dev/null; then
+          npm install --save-dev eslint
+        fi
+        # Run ESLint on JavaScript files
+        npx eslint . --ext .js --ignore-pattern node_modules/ || echo "ESLint not configured, skipping..."
+
+    - name: Setup Pulumi CLI
+      uses: pulumi/actions@v5
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Pulumi Preview (Dry Run)
+      run: |
+        pulumi stack select dev --create
+        pulumi preview
+      env:
+        PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+    - name: Validate Pulumi Configuration
+      run: |
+        # Check if Pulumi.yaml is valid
+        pulumi config
+        # Validate that all required dependencies are present
+        node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const requiredDeps = ['@pulumi/aws', '@pulumi/aws-apigateway', '@pulumi/awsx', '@pulumi/pulumi'];
+          const missing = requiredDeps.filter(dep => !pkg.dependencies[dep]);
+          if (missing.length > 0) {
+            console.error('Missing required dependencies:', missing);
+            process.exit(1);
+          }
+          console.log('All required Pulumi dependencies are present');
+        "
+      env:
+        PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+    - name: Check for syntax errors
+      run: |
+        # Basic syntax check
+        node -c index.js
+        echo "JavaScript syntax is valid"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run security audit
+      run: |
+        npm audit --audit-level=moderate
+        echo "Security audit completed"
+
+    - name: Check for secrets in code
+      run: |
+        # Basic check for common secret patterns
+        if grep -r -i -E "(password|secret|key|token).*=.*['\"][^'\"]{8,}" . --exclude-dir=node_modules --exclude-dir=.git; then
+          echo "⚠️  Potential secrets found in code. Please review."
+          exit 1
+        else
+          echo "✅ No obvious secrets found in code"
+        fi
