@@ -38,6 +38,29 @@ const eventHandler = new aws.lambda.CallbackFunction("handler", {
     },
 });
 
+// Create S3 bucket for access logs to resolve CIS policy violation
+const accessLogsBucket = new aws.s3.Bucket("api-access-logs", {
+    // Enable versioning for the logs bucket
+    versioning: {
+        enabled: true,
+    },
+    // Enable server-side encryption
+    serverSideEncryptionConfiguration: {
+        rule: {
+            applyServerSideEncryptionByDefault: {
+                sseAlgorithm: "AES256",
+            },
+        },
+    },
+    // Block public access
+    publicAccessBlock: {
+        blockPublicAcls: true,
+        blockPublicPolicy: true,
+        ignorePublicAcls: true,
+        restrictPublicBuckets: true,
+    },
+});
+
 // Create a public HTTP endpoint (using AWS APIGateway)
 // TODO This was awsx on the example, but it's not working.
 // const endpoint = new aws.apigateway.API("hello", {
@@ -76,6 +99,13 @@ const endpoint = new apigateway.RestAPI("api", {
     ],
 });
 
+// Configure access logging for the S3 bucket created by the API Gateway component
+// This resolves the CIS policy violation: s3-bucket-logging-enabled
+const bucketLogging = new aws.s3.BucketLogging("api-bucket-logging", {
+    bucket: endpoint.bucket.id,
+    targetBucket: accessLogsBucket.id,
+    targetPrefix: "access-logs/",
+});
 
 // Export the public URL for the HTTP service
 exports.url = endpoint.url;
