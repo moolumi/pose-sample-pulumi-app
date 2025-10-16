@@ -76,6 +76,43 @@ const endpoint = new apigateway.RestAPI("api", {
     ],
 });
 
+// Create a separate S3 bucket for access logging
+const accessLogsBucket = new aws.s3.Bucket("api-access-logs", {
+    // Enable versioning for the logging bucket as a best practice
+    versioning: {
+        enabled: true,
+    },
+    // Set lifecycle configuration to manage log retention
+    lifecycleRules: [{
+        id: "delete_old_logs",
+        enabled: true,
+        expiration: {
+            days: 90, // Keep logs for 90 days
+        },
+    }],
+});
+
+// Configure S3 access logging for the API bucket
+// The bucket is created by the RestAPI component with a known naming pattern
+// We reference it directly by its expected name
+const bucketLogging = new aws.s3.BucketLoggingV2("api-bucket-logging", {
+    bucket: "api", // Logical name of the bucket created by the RestAPI component
+    targetBucket: accessLogsBucket.id,
+    targetPrefix: "access-logs/",
+    targetGrants: [{
+        grantee: {
+            type: "Group",
+            uri: "http://acs.amazonaws.com/groups/s3/LogDelivery",
+        },
+        permission: "WRITE",
+    }, {
+        grantee: {
+            type: "Group", 
+            uri: "http://acs.amazonaws.com/groups/s3/LogDelivery",
+        },
+        permission: "READ",
+    }],
+});
 
 // Export the public URL for the HTTP service
 exports.url = endpoint.url;
