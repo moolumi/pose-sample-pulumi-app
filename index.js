@@ -58,6 +58,34 @@ const eventHandler = new aws.lambda.CallbackFunction("handler", {
 // });
 // Ahhh I was using the wrong one. It's not. It's RESTAPI.
 
+// Create a separate bucket for access logs first
+const logsBucket = new aws.s3.Bucket("static-files-access-logs");
+
+// Create an S3 bucket for static files
+const staticFilesBucket = new aws.s3.Bucket("static-files");
+
+// Configure S3 bucket logging using BucketLoggingV2 resource
+const bucketLogging = new aws.s3.BucketLoggingV2("static-files-logging", {
+    bucket: staticFilesBucket.id,
+    targetBucket: logsBucket.id,
+    targetPrefix: "access-logs/",
+});
+
+// Upload static files to the bucket
+const indexFile = new aws.s3.BucketObject("index.html", {
+    bucket: staticFilesBucket.id,
+    key: "index.html",
+    source: new pulumi.asset.FileAsset("www/index.html"),
+    contentType: "text/html",
+});
+
+const faviconFile = new aws.s3.BucketObject("favicon.png", {
+    bucket: staticFilesBucket.id,
+    key: "favicon.png", 
+    source: new pulumi.asset.FileAsset("www/favicon.png"),
+    contentType: "image/png",
+});
+
 // A REST API to route requests to the Lambda function.
 // TODO Wrong: it's RestApi, not RestAPI.
 // https://www.pulumi.com/docs/iac/clouds/aws/guides/api-gateway/
@@ -71,7 +99,11 @@ const endpoint = new apigateway.RestAPI("api", {
         },
         {
             path: "/",
-            localPath: "www",
+            target: {
+                type: "s3",
+                bucket: staticFilesBucket.id,
+                key: "index.html",
+            },
         },
     ],
 });
