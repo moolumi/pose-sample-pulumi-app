@@ -1,0 +1,57 @@
+name: Render Infrastructure Diagram
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'infrastructure-diagram.pov'
+      - '.github/workflows/render-infrastructure-diagram.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'infrastructure-diagram.pov'
+      - '.github/workflows/render-infrastructure-diagram.yml'
+  workflow_dispatch:
+
+jobs:
+  render-diagram:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install POV-Ray
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y povray
+        
+    - name: Verify POV-Ray installation
+      run: |
+        povray --version
+        
+    - name: Create output directory
+      run: mkdir -p rendered-diagrams
+      
+    - name: Render infrastructure diagram
+      run: |
+        povray +W1920 +H1080 +A0.3 +O"rendered-diagrams/infrastructure-diagram.png" infrastructure-diagram.pov
+        
+    - name: Verify rendered output
+      run: |
+        ls -la rendered-diagrams/
+        file rendered-diagrams/infrastructure-diagram.png
+        
+    - name: Upload rendered diagram as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: infrastructure-diagram
+        path: rendered-diagrams/infrastructure-diagram.png
+        retention-days: 30
+        
+    - name: Upload diagram with timestamp
+      uses: actions/upload-artifact@v4
+      with:
+        name: infrastructure-diagram-${{ github.run_number }}
+        path: rendered-diagrams/infrastructure-diagram.png
+        retention-days: 90
