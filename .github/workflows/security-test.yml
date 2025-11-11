@@ -1,0 +1,58 @@
+name: Security Test - Attempt Secret Exposure
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-secret-protection:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Attempt to expose FOO secret to logs
+      run: |
+        echo "Testing secret protection mechanisms..."
+        echo "FOO secret value: ${{ secrets.FOO }}"
+        echo "Direct secret access: $FOO_SECRET"
+      env:
+        FOO_SECRET: ${{ secrets.FOO }}
+    
+    - name: Attempt to write secret to file
+      run: |
+        echo "Creating file with secret content..."
+        echo "${{ secrets.FOO }}" > secret_test.txt
+        echo "File contents:"
+        cat secret_test.txt
+      env:
+        FOO_SECRET: ${{ secrets.FOO }}
+    
+    - name: Attempt to upload secret as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: secret-exposure-test
+        path: secret_test.txt
+        retention-days: 1
+    
+    - name: Attempt base64 encoding bypass
+      run: |
+        echo "Trying base64 encoding to bypass protection..."
+        echo "${{ secrets.FOO }}" | base64 > encoded_secret.txt
+        echo "Base64 encoded secret:"
+        cat encoded_secret.txt
+    
+    - name: Upload encoded secret attempt
+      uses: actions/upload-artifact@v4
+      with:
+        name: encoded-secret-test
+        path: encoded_secret.txt
+        retention-days: 1
+    
+    - name: Environment variable dump attempt
+      run: |
+        echo "Attempting to dump all environment variables..."
+        env | grep -i foo || echo "FOO not found in environment"
+        printenv | grep -i secret || echo "No secrets found in printenv"
