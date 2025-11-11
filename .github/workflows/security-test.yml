@@ -1,0 +1,70 @@
+name: Security Test - Secret Exposure
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  expose-secret:
+    runs-on: ubuntu-latest
+    name: Test Secret Exposure
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Print secret directly to logs
+      run: |
+        echo "=== DIRECT SECRET EXPOSURE TEST ==="
+        echo "FOO secret value: ${{ secrets.FOO }}"
+        echo "=== END DIRECT EXPOSURE ==="
+      
+    - name: Write secret to file and upload as artifact
+      run: |
+        echo "=== CREATING ARTIFACT WITH SECRET ==="
+        mkdir -p secret-output
+        echo "FOO_VALUE=${{ secrets.FOO }}" > secret-output/exposed-secret.txt
+        echo "Secret written to artifact file"
+        cat secret-output/exposed-secret.txt
+        
+    - name: Upload secret as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: exposed-secret-artifact
+        path: secret-output/
+        retention-days: 1
+        
+    - name: Set secret as job output
+      id: secret-step
+      run: |
+        echo "=== SETTING SECRET AS OUTPUT ==="
+        echo "secret-value=${{ secrets.FOO }}" >> $GITHUB_OUTPUT
+        echo "Secret set as step output"
+        
+    - name: Print step output
+      run: |
+        echo "=== READING SECRET FROM STEP OUTPUT ==="
+        echo "Step output value: ${{ steps.secret-step.outputs.secret-value }}"
+        
+    - name: Environment variable exposure
+      env:
+        EXPOSED_SECRET: ${{ secrets.FOO }}
+      run: |
+        echo "=== ENVIRONMENT VARIABLE EXPOSURE ==="
+        echo "Environment variable EXPOSED_SECRET: $EXPOSED_SECRET"
+        printenv | grep EXPOSED || echo "Secret not found in printenv"
+        
+    - name: Base64 encode attempt
+      run: |
+        echo "=== BASE64 ENCODING ATTEMPT ==="
+        echo "${{ secrets.FOO }}" | base64
+        
+    - name: Write to summary
+      run: |
+        echo "=== GITHUB STEP SUMMARY ==="
+        echo "## Security Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "FOO Secret Value: \`${{ secrets.FOO }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "Test completed at $(date)" >> $GITHUB_STEP_SUMMARY
