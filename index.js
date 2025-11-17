@@ -76,6 +76,88 @@ const endpoint = new apigateway.RestAPI("api", {
     ],
 });
 
+// Create S3 bucket for access logs (required for S3 bucket logging)
+const logsBucket = new aws.s3.Bucket("api-access-logs", {
+    // Enable versioning for the logs bucket
+    versioning: {
+        enabled: true,
+    },
+    // Prevent accidental deletion
+    forceDestroy: false,
+});
+
+// Configure bucket logging on the API's S3 bucket
+// Note: The RestAPI component creates an S3 bucket internally, we need to reference it
+// We'll use the bucket name from the endpoint's bucket property
+const bucketLogging = new aws.s3.BucketLogging("api-bucket-logging", {
+    bucket: endpoint.bucket,
+    targetBucket: logsBucket.id,
+    targetPrefix: "access-logs/",
+});
+
+// Create GuardDuty Detector for threat detection
+const guardDutyDetector = new aws.guardduty.Detector("guardduty-detector", {
+    enable: true,
+    // Enable malware detection
+    datasources: {
+        malwareProtection: {
+            scanEc2InstanceWithFindings: {
+                ebsVolumes: true,
+            },
+        },
+        kubernetes: {
+            auditLogs: true,
+        },
+        s3Logs: {
+            enable: true,
+        },
+    },
+});
+
+// Create CloudWatch Log Group for API Gateway access logs
+const apiLogGroup = new aws.cloudwatch.LogGroup("api-gateway-logs", {
+    name: "/aws/apigateway/api-access-logs",
+    retentionInDays: 30,
+});
+
+// Configure API Gateway stage logging
+// Note: This requires accessing the stage created by the RestAPI component
+const stageLogging = new aws.apigateway.MethodSettings("api-stage-logging", {
+    restApi: endpoint.api.id,
+    stageName: endpoint.stage.stageName,
+    methodPath: "*/*",
+    settings: {
+        loggingLevel: "INFO",
+        dataTraceEnabled: true,
+        metricsEnabled: true,
+    },
+});
+
+// Update the stage to enable access logging
+const stageUpdate = new aws.apigateway.Stage("api-stage-with-logging", {
+    restApi: endpoint.api.id,
+    stageName: endpoint.stage.stageName,
+    deployment: endpoint.deployment.id,
+    accessLogSettings: {
+        destinationArn: apiLogGroup.arn,
+        format: JSON.stringify({
+            requestId: "$context.requestId",
+            ip: "$context.identity.sourceIp",
+            caller: "$context.identity.caller",
+            user: "$context.identity.user",
+            requestTime: "$context.requestTime",
+            httpMethod: "$context.httpMethod",
+            resourcePath: "$context.resourcePath",
+            status: "$context.status",
+            protocol: "$context.protocol",
+            responseLength: "$context.responseLength"
+        }),
+    },
+}, {
+    dependsOn: [endpoint.stage],
+});
 
 // Export the public URL for the HTTP service
 exports.url = endpoint.url;
+exports.guardDutyDetectorId = guardDutyDetector.id;
+exports.logsBucketName = logsBucket.id;
