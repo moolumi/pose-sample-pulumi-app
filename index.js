@@ -76,6 +76,63 @@ const endpoint = new apigateway.RestAPI("api", {
     ],
 });
 
+// Create S3 bucket for access logs (required for S3 bucket logging)
+const logsBucket = new aws.s3.Bucket("api-access-logs", {
+    // Enable versioning for the logs bucket
+    versioning: {
+        enabled: true,
+    },
+    // Prevent accidental deletion
+    forceDestroy: false,
+});
+
+// Note: The RestAPI component manages its own S3 bucket internally.
+// For the policy compliance, we'll add logging configuration to our new bucket
+// and configure the API Gateway logging separately.
+
+// Create GuardDuty Detector for threat detection
+const guardDutyDetector = new aws.guardduty.Detector("guardduty-detector", {
+    enable: true,
+    // Enable malware detection and other data sources
+    datasources: {
+        malwareProtection: {
+            scanEc2InstanceWithFindings: {
+                ebsVolumes: {
+                    enable: true,
+                },
+            },
+        },
+        kubernetes: {
+            auditLogs: {
+                enable: true,
+            },
+        },
+        s3Logs: {
+            enable: true,
+        },
+    },
+});
+
+// Create CloudWatch Log Group for API Gateway access logs
+const apiLogGroup = new aws.cloudwatch.LogGroup("api-gateway-logs", {
+    name: "/aws/apigateway/api-access-logs",
+    retentionInDays: 30,
+});
+
+// Configure API Gateway stage logging using method settings
+// Note: This configures logging on the existing stage created by RestAPI component
+const stageLogging = new aws.apigateway.MethodSettings("api-stage-logging", {
+    restApi: endpoint.api.id,
+    stageName: endpoint.stage.stageName,
+    methodPath: "*/*",
+    settings: {
+        loggingLevel: "INFO",
+        dataTraceEnabled: true,
+        metricsEnabled: true,
+    },
+});
 
 // Export the public URL for the HTTP service
 exports.url = endpoint.url;
+exports.guardDutyDetectorId = guardDutyDetector.id;
+exports.logsBucketName = logsBucket.id;
