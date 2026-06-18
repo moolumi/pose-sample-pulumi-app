@@ -77,5 +77,10 @@ const endpoint = new apigateway.RestAPI("api", {
 });
 
 
+// An S3 bucket for general use.
+const bucket = new aws.s3.BucketV2("my-eval-test-bucket");
+
 // Export the public URL for the HTTP service
 exports.url = endpoint.url;
+// Export the S3 bucket name
+exports.bucketName = bucket.bucket;
